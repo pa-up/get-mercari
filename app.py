@@ -1,13 +1,22 @@
 import streamlit as st
 import pandas as pd
+import base64
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time
+import os
+import sys
 
+# このアプリフォルダの絶対パスを取得
+this_file_abspath = os.path.abspath(sys.argv[0])
+last_slash_index = this_file_abspath.rfind('/')  # 最後の '/' のインデックスを取得
+this_app_root_abspath = this_file_abspath[:last_slash_index]
 
 item_ls = []
 item_url_ls=[]
-def browser_setup():
+def browser_setup(chromedriver_path):
     """ブラウザを起動する関数"""
     #ブラウザの設定
     options = webdriver.ChromeOptions()
@@ -15,7 +24,7 @@ def browser_setup():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     #ブラウザの起動
-    browser = webdriver.Chrome('chromedriver_112',options=options)
+    browser = webdriver.Chrome(chromedriver_path , options=options)
     browser.implicitly_wait(3)
     return browser
 
@@ -25,10 +34,11 @@ def get_url(KEYWORD , browser):
     url = 'https://jp.mercari.com/search?keyword=' + KEYWORD + '&status=sold_out%7Ctrading'
     browser.get(url)
     browser.implicitly_wait(5)
+    wait = WebDriverWait(browser, 10)
 
     #商品の詳細ページのURLを取得する
     # item_box = browser.find_elements_by_css_selector('#item-grid > ul > li')
-    item_box = browser.find_elements(By.CSS_SELECTOR, '#item-grid > ul > li')
+    item_box = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, '#item-grid > ul > li')))
     for item_elem in item_box:
         # item_url_ls.append(item_elem.find_element_by_css_selector('a').get_attribute('href'))
         # item_url_ls.append(item_elem.find_elements(By.CSS_SELECTOR, 'a').get_attribute('href'))
@@ -44,84 +54,94 @@ def is_contained(target_str, search_str):
         return True
     else:
         return False
+    
+def df_to_csv_local_url(df: pd.DataFrame , output_csv_path: str = "output.csv"):
+    """ データフレーム型の表をcsv形式でダウンロードできるURLを生成する関数 """
+    # csvの生成＆ローカルディレクトリ上に保存（「path_or_buf」を指定したら、戻り値は「None」）
+    df.to_csv(path_or_buf=output_csv_path, index=False, encoding='utf-8-sig')
+    # ダウロードできるaタグを生成
+    csv = df.to_csv(index=False, encoding='utf-8-sig')
+    b64 = base64.b64encode(csv.encode('utf-8-sig')).decode()  # some strings <-> bytes conversions necessary here
+    csv_local_href = f'<a href="data:file/csv;base64,{b64}" download={output_csv_path}>CSVでダウンロード</a>'
+    return csv_local_href
 
 
 def page_mercari_com(browser):
+    wait = WebDriverWait(browser, 10)
     #商品名 
-    item_name = browser.find_element(By.CSS_SELECTOR,'#item-info > section:nth-child(1) > div.mer-spacing-b-12').text
+    item_name = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '#item-info > section:nth-child(1) > div.mer-spacing-b-12'))).text
     # 商品説明
-    shadow_root = browser.find_element(By.CSS_SELECTOR,'#item-info > section:nth-child(2) > mer-show-more').shadow_root
-    item_ex = shadow_root.find_element(By.CSS_SELECTOR,'div.content.clamp').text
+    item_ex = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '#item-info > section:nth-child(2) > div:nth-child(2)'))).text
     # 価格
-    item_price = browser.find_element(By.CSS_SELECTOR, '#item-info [data-testid="price"] > span:last-child').text
-    # 画像のURL
-    src = browser.find_element(By.CSS_SELECTOR,'div.slick-list div[data-index="0"] img').get_attribute('src')
-
-    return item_name , item_ex , item_price , src
+    item_price = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '#item-info [data-testid="price"] > span:last-child'))).text
+    return item_name , item_ex , item_price
 
 
 def page_mercari_shop_com(browser):
+    wait = WebDriverWait(browser, 10)
     #商品名 
-    item_name = browser.find_element(By.CSS_SELECTOR, 'h1.chakra-heading.css-159ujot').text
+    item_name = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'h1'))).text
     # 商品説明
-    item_ex = browser.find_element(By.CSS_SELECTOR,'div.css-0 div.css-1x15fb3 p').text
+    item_ex = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '#product-info > section:nth-child(2) > div:nth-child(2)'))).text
     # 価格
-    item_price = browser.find_element(By.CSS_SELECTOR,'.chakra-stack.css-xerlbm .css-x1sij0 .css-1vczxwq').text
-    # 画像のURL
-    src = browser.find_element(By.CSS_SELECTOR, 'div.css-1f8sh1y img').get_attribute('src')
-
-    return item_name , item_ex , item_price , src
+    item_price = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '#product-info [data-testid="product-price"] > span:last-child'))).text
+    return item_name , item_ex , item_price
 
 
-def get_data(browser):
+def get_data(browser , getting_count):
     #商品情報の詳細を取得する
     count = 0
-    print(f"商品数 : {len(item_url_ls)}個 \n")
+    st.write("")
+    st.write(f"商品数 : {getting_count}件 のみを取得中 \n")
     for item_url in item_url_ls:
         count = count + 1
-        print(f"{count}個目")
-        
-        browser.get(item_url)
-        time.sleep(3)
+        if count <= getting_count:
+            browser.get(item_url)
+            time.sleep(3)
 
-        #商品名〜画像URLを取得
-        if is_contained(item_url, "shop"):  # 商品詳細ページが「mercari-shops.com」の場合
-            item_name , item_ex , item_price , src = page_mercari_shop_com(browser)
-        else:  # 商品詳細ページが「mercari.com」の場合
-            item_name , item_ex , item_price , src = page_mercari_com(browser)
-        
-        data = {
-            '商品名':item_name,
-            '商品説明':item_ex,
-            '価格':item_price,
-            'URL':item_url,
-            '画像URL':src
-        }
-
-        item_ls.append(data)
+            #商品名〜画像URLを取得
+            if is_contained(item_url, "shop"):  # 商品詳細ページが「mercari-shops.com」の場合
+                item_name , item_ex , item_price = page_mercari_shop_com(browser)
+            else:  # 商品詳細ページが「mercari.com」の場合
+                item_name , item_ex , item_price = page_mercari_com(browser)
+            
+            data = {
+                '商品名':item_name,
+                '商品説明':item_ex,
+                '価格':item_price,
+                'URL':item_url,
+            }
+            item_ls.append(data)
 
 
 def main():
+    # ファイルパスの定義
+    chromedriver_path =  os.path.join(this_app_root_abspath , "static/driver/chromedriver_114")
+    output_csv_path = "media/csv/output.csv"
+
     KEYWORD = ""
     st.title("メルカリ売れ行き商品を一括取得")
     st.write("<p></p>", unsafe_allow_html=True)
+    st.markdown("販売状況が「売り切れ」のみの商品の情報を一括取得します。<br> ※ 約 45秒/10件 ほど処理に時間がかかります。", unsafe_allow_html=True)
+    st.write("<p></p>", unsafe_allow_html=True)
     KEYWORD = st.text_input("検索キーワード")
     st.write("<p></p>", unsafe_allow_html=True)
+    getting_count = st.text_input("取得する件数（ 数値のみ入力可能 ）") 
+    st.write("")
+    try:
+        getting_count = int(getting_count)
+    except:
+        pass
 
-    if KEYWORD != "":
-        browser = browser_setup()
+    button_clicked = st.button("取得開始")
+    if KEYWORD != "" and isinstance(getting_count , int) and button_clicked :
+        getting_count = int(getting_count)
+        browser = browser_setup(chromedriver_path)
         get_url(KEYWORD , browser)
-        get_data(browser)
+        get_data(browser , getting_count)
         df = pd.DataFrame(item_ls)
-        csv = df.to_csv(index=False)
-
-        # CSVファイルのダウンロードボタンを表示
-        st.download_button(
-            label='CSVをダウンロード',
-            data=csv,
-            file_name='メルカリデータ.csv',
-            mime='text/csv'
-        )
+        csv_local_href = df_to_csv_local_url(df , output_csv_path)
+        st.markdown(csv_local_href , unsafe_allow_html=True)
 
 
 if __name__ == '__main__':

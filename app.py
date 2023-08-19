@@ -109,7 +109,7 @@ def get_data(browser , getting_count):
 
 def main():
     # ファイルパスの定義
-    chromedriver_path =  "static/driver/chromedriver_114"
+    chromedriver_path =  "static/driver/chromedriver_114_linux"
     output_csv_path = "media/csv/output.csv"
 
     KEYWORD = ""

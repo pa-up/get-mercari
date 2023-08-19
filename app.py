@@ -6,13 +6,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
-import os
-import sys
-
-# このアプリフォルダの絶対パスを取得
-this_file_abspath = os.path.abspath(sys.argv[0])
-last_slash_index = this_file_abspath.rfind('/')  # 最後の '/' のインデックスを取得
-this_app_root_abspath = this_file_abspath[:last_slash_index]
 
 item_ls = []
 item_url_ls=[]
@@ -116,7 +109,7 @@ def get_data(browser , getting_count):
 
 def main():
     # ファイルパスの定義
-    chromedriver_path =  os.path.join(this_app_root_abspath , "static/driver/chromedriver_114")
+    chromedriver_path =  "static/driver/chromedriver_114"
     output_csv_path = "media/csv/output.csv"
 
     KEYWORD = ""

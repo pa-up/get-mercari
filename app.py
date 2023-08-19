@@ -17,7 +17,7 @@ def browser_setup(chromedriver_path):
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     #ブラウザの起動
-    browser = webdriver.Chrome(chromedriver_path , options=options)
+    browser = webdriver.Chrome(executable_path = chromedriver_path , chrome_options = options)
     browser.implicitly_wait(3)
     return browser
 
